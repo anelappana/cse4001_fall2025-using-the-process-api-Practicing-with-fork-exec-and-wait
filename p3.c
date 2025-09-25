@@ -1,4 +1,3 @@
-// p3_child_first_no_wait.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
