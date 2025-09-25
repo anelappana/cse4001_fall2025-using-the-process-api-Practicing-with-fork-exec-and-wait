@@ -1,4 +1,3 @@
-// p6_waitpid.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -31,3 +30,4 @@ main(int argc, char *argv[])
 
     return 0;
 }
+

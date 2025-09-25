@@ -89,37 +89,254 @@ main(int argc, char *argv[])
 2. Write a program that opens a file (with the `open()` system call) and then calls `fork()` to create a new process. Can both the child and parent access the file descriptor returned by `open()`? What happens when they are writing to the file concurrently, i.e., at the same time?
 
 ```cpp
-// Add your code or answer here. You can also add screenshots showing your program's execution.  
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <sys/wait.h>
+
+int
+main(int argc, char *argv[])
+{
+    printf("hello world (pid:%d)\n", (int) getpid());
+    int fd = open("out.txt", O_CREAT | O_TRUNC | O_WRONLY /* | O_APPEND */, 0644);
+    if (fd < 0) { perror("open"); exit(1); }
+
+    int rc = fork();
+    if (rc < 0) {
+        // fork failed; exit
+        fprintf(stderr, "fork failed\n");
+        close(fd);
+        exit(1);
+    } else if (rc == 0) {
+        // child (new process)
+        printf("hello, I am child (pid:%d)\n", (int) getpid());
+        const char *msg = "child\n";
+        for (int i = 0; i < 10; i++) {
+            if (write(fd, msg, (int)strlen(msg)) < 0) { perror("write(child)"); _exit(1); }
+            sleep(1);
+        }
+        close(fd);
+        _exit(0);
+    } else {
+        // parent goes down this path (original process)
+        const char *msg = "parent\n";
+        for (int i = 0; i < 10; i++) {
+            if (write(fd, msg, (int)strlen(msg)) < 0) { perror("write(parent)"); exit(1); }
+            sleep(1);
+        }
+        close(fd);
+        int wc = wait(NULL);
+        assert(wc >= 0);
+    }
+    return 0;
+}
 ```
 
 3. Write another program using `fork()`.The child process should print “hello”; the parent process should print “goodbye”. You should try to ensure that the child process always prints first; can you do this without calling `wait()` in the parent?
 
 ```cpp
-// Add your code or answer here. You can also add screenshots showing your program's execution.  
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <sys/wait.h>
+
+int
+main(int argc, char *argv[])
+{
+    int p[2];
+    if (pipe(p) < 0) { perror("pipe"); exit(1); }
+
+    int rc = fork();
+    if (rc < 0) {
+        fprintf(stderr, "fork failed\n");
+        exit(1);
+    } else if (rc == 0) {
+        close(p[0]); // child writes signal after printing
+        printf("hello (child pid:%d)\n", (int)getpid());
+        fflush(stdout);
+        if (write(p[1], "x", 1) != 1) perror("write");
+        close(p[1]);
+        _exit(0);
+    } else {
+        close(p[1]); // parent waits by reading one byte
+        char b;
+        if (read(p[0], &b, 1) != 1) perror("read");
+        close(p[0]);
+        printf("goodbye (parent pid:%d, child:%d)\n", (int)getpid(), rc);
+        // no wait(); child already exited or will soon; pipe enforced print order
+    }
+    return 0;
+}  
 ```
 
 
 4. Write a program that calls `fork()` and then calls some form of `exec()` to run the program `/bin/ls`. See if you can try all of the variants of `exec()`, including (on Linux) `execl()`, `execle()`, `execlp()`, `execv()`, `execvp()`, and `execvpe()`. Why do you think there are so many variants of the same basic call?
 
 ```cpp
-// Add your code or answer here. You can also add screenshots showing your program's execution.  
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <sys/wait.h>
+
+extern char **environ;
+
+int
+main(int argc, char *argv[])
+{
+    const char *which = (argc > 1) ? argv[1] : "execl";
+
+    int rc = fork();
+    if (rc < 0) {
+        fprintf(stderr, "fork failed\n");
+        exit(1);
+    } else if (rc == 0) {
+        if (strcmp(which, "execl") == 0) {
+            execl("/bin/ls", "ls", "-l", "/", (char*)NULL);
+        } else if (strcmp(which, "execle") == 0) {
+            char *envp[] = { "LANG=C", "FOO=BAR", NULL };
+            execle("/bin/ls", "ls", "-l", "/", (char*)NULL, envp);
+        } else if (strcmp(which, "execlp") == 0) {
+            execlp("ls", "ls", "-l", "/", (char*)NULL);
+        } else if (strcmp(which, "execv") == 0) {
+            char *args[] = { "ls", "-l", "/", NULL };
+            execv("/bin/ls", args);
+        } else if (strcmp(which, "execvp") == 0) {
+            char *args[] = { "ls", "-l", "/", NULL };
+            execvp("ls", args);
+        } else if (strcmp(which, "execvpe") == 0) { // GNU extension
+            char *args[] = { "ls", "-l", "/", NULL };
+            char *envp[] = { "LANG=C", "FOO=BAZ", NULL };
+            execvpe("ls", args, envp);
+        } else {
+            fprintf(stderr, "usage: %s [execl|execle|execlp|execv|execvp|execvpe]\n", argv[0]);
+            _exit(2);
+        }
+        perror("exec"); // reach here only if exec failed
+        _exit(1);
+    } else {
+        int wc = wait(NULL);
+        assert(wc >= 0);
+    }
+    return 0;
+}
 ```
 
 5. Now write a program that uses `wait()` to wait for the child process to finish in the parent. What does `wait()` return? What happens if you use `wait()` in the child?
 
 ```cpp
-// Add your code or answer here. You can also add screenshots showing your program's execution.  
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <sys/wait.h>
+#include <errno.h>
+
+int
+main(int argc, char *argv[])
+{
+    int rc = fork();
+    if (rc < 0) {
+        fprintf(stderr, "fork failed\n");
+        exit(1);
+    } else if (rc == 0) {
+        // child has no children; wait() should fail with ECHILD
+        int st;
+        pid_t r = wait(&st);
+        if (r == -1) perror("child wait (expected ECHILD)");
+        _exit(42); // exit code 42
+    } else {
+        int st;
+        pid_t done = wait(&st);
+        assert(done >= 0);
+        if (WIFEXITED(st)) {
+            printf("parent: child %d exited with code %d\n",
+                   (int)done, WEXITSTATUS(st));
+        } else if (WIFSIGNALED(st)) {
+            printf("parent: child %d killed by signal %d\n",
+                   (int)done, WTERMSIG(st));
+        }
+    }
+    return 0;
+}
 ```
 
 6. Write a slight modification of the previous program, this time using `waitpid()` instead of `wait()`. When would `waitpid()` be useful?
 
 ```cpp
-// Add your code or answer here. You can also add screenshots showing your program's execution.  
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <sys/wait.h>
+
+int
+main(int argc, char *argv[])
+{
+    int rcA = fork();
+    if (rcA < 0) { fprintf(stderr, "fork A failed\n"); exit(1); }
+    if (rcA == 0) { usleep(200000); _exit(10); } // child A exits later
+
+    int rcB = fork();
+    if (rcB < 0) { fprintf(stderr, "fork B failed\n"); exit(1); }
+    if (rcB == 0) { usleep(100000); _exit(20); } // child B exits earlier
+
+    int st;
+    pid_t r = waitpid(rcA, &st, 0);         // specifically wait for A first
+    assert(r == rcA);
+    printf("waited for A (%d), exit=%d\n", rcA,
+           WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+
+    r = waitpid(-1, &st, 0);                // reap the remaining child
+    assert(r == rcB);
+    printf("waited for B (%d), exit=%d\n", rcB,
+           WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+
+    return 0;
+}
 ```
 
 7. Write a program that creates a child process, and then in the child closes standard output (`STDOUT FILENO`). What happens if the child calls `printf()` to print some output after closing the descriptor?
 
 ```cpp
-// Add your code or answer here. You can also add screenshots showing your program's execution.  
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <sys/wait.h>
+
+int
+main(int argc, char *argv[])
+{
+    int rc = fork();
+    if (rc < 0) {
+        fprintf(stderr, "fork failed\n");
+        exit(1);
+    } else if (rc == 0) {
+        close(STDOUT_FILENO);
+        printf("you should NOT see this line (child pid:%d)\n", (int)getpid());
+        if (fflush(stdout) != 0) perror("child fflush"); // expect EBADF
+        _exit(0);
+    } else {
+        printf("parent still has stdout (pid:%d, child:%d)\n", (int)getpid(), rc);
+        int wc = wait(NULL);
+        assert(wc >= 0);
+    }
+    return 0;
+}
 ```
 
