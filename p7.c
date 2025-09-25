@@ -1,4 +1,3 @@
-// p7_close_stdout.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
