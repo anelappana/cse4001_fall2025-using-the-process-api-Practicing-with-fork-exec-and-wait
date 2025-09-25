@@ -85,6 +85,9 @@ main(int argc, char *argv[])
 }
 ```
 
+![alt text](Screenshot1.png)
+
+This program initializes a variable before fork(). Both parent and child start with the same value, but after the fork each has its own copy, so changes in one process do not affect the other.
 
 2. Write a program that opens a file (with the `open()` system call) and then calls `fork()` to create a new process. Can both the child and parent access the file descriptor returned by `open()`? What happens when they are writing to the file concurrently, i.e., at the same time?
 
@@ -134,6 +137,9 @@ main(int argc, char *argv[])
     return 0;
 }
 ```
+![alt text](Screenshot2.png)
+
+A file is opened before fork(), so both processes inherit the same file descriptor pointing to one open-file description (same offset). Both can write concurrently, leading to interleaving unless O_APPEND is used, in which case each write() appends atomically but order is still nondeterministic.
 
 3. Write another program using `fork()`.The child process should print “hello”; the parent process should print “goodbye”. You should try to ensure that the child process always prints first; can you do this without calling `wait()` in the parent?
 
@@ -174,7 +180,9 @@ main(int argc, char *argv[])
     return 0;
 }  
 ```
+![alt text](Screenshot3.png)
 
+This program uses a pipe for synchronization: the child prints “hello” and writes a byte to the pipe, which the parent reads before printing “goodbye.” This guarantees the child always prints first without needing wait().
 
 4. Write a program that calls `fork()` and then calls some form of `exec()` to run the program `/bin/ls`. See if you can try all of the variants of `exec()`, including (on Linux) `execl()`, `execle()`, `execlp()`, `execv()`, `execvp()`, and `execvpe()`. Why do you think there are so many variants of the same basic call?
 
@@ -229,6 +237,9 @@ main(int argc, char *argv[])
     return 0;
 }
 ```
+![alt text](Screenshot4.png)
+
+The child process replaces itself with /bin/ls using different exec*() variants. These functions differ in how arguments are passed (list vs. vector), whether PATH is searched, and whether a custom environment is supplied.
 
 5. Now write a program that uses `wait()` to wait for the child process to finish in the parent. What does `wait()` return? What happens if you use `wait()` in the child?
 
@@ -270,6 +281,9 @@ main(int argc, char *argv[])
     return 0;
 }
 ```
+![alt text](Screenshot5.png)
+
+The parent calls wait() to reap its child and retrieve the exit code, while the child tries wait() but gets an error (ECHILD) because it has no children. This demonstrates how wait() works differently in parent vs. child.
 
 6. Write a slight modification of the previous program, this time using `waitpid()` instead of `wait()`. When would `waitpid()` be useful?
 
@@ -307,6 +321,9 @@ main(int argc, char *argv[])
     return 0;
 }
 ```
+![alt text](Screenshot6.png)
+
+The parent uses waitpid() to wait for a specific child first, even though another finishes earlier. This shows the control waitpid() provides over which child to reap, unlike wait() which reaps any child.
 
 7. Write a program that creates a child process, and then in the child closes standard output (`STDOUT FILENO`). What happens if the child calls `printf()` to print some output after closing the descriptor?
 
@@ -339,4 +356,6 @@ main(int argc, char *argv[])
     return 0;
 }
 ```
+![alt text](Screenshot7.png)
 
+The child closes STDOUT_FILENO and then calls printf(). Because fd 1 is invalid, flushing stdout fails with “Bad file descriptor,” demonstrating what happens when you write to a closed descriptor.
